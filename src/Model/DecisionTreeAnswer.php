@@ -2,6 +2,7 @@
 
 namespace DNADesign\SilverStripeElementalDecisionTree\Model;
 
+use SilverStripe\ORM\ValidationException;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Control\Controller;
 use SilverStripe\Forms\LiteralField;
@@ -97,10 +98,10 @@ class DecisionTreeAnswer extends DataObject
     }
 
     /**
-    * Used as breadcrumbs on the parent Step
-    *
-    * @return String
-    */
+     * Used as breadcrumbs on the parent Step
+     *
+     * @return String
+     */
     public function TitleWithQuestion()
     {
         $title = $this->Title;
@@ -111,13 +112,13 @@ class DecisionTreeAnswer extends DataObject
     }
 
     /**
-    * Create a link that allowd to edit this object in the CMS
-    * To do this, it first finds its parent question
-    * then rewind the tree up to the element
-    * then append its edit url to the edit url of its parent question
-    *
-    * @return String
-    */
+     * Create a link that allowd to edit this object in the CMS
+     * To do this, it first finds its parent question
+     * then rewind the tree up to the element
+     * then append its edit url to the edit url of its parent question
+     *
+     * @return String
+     */
     public function CMSEditLink() {
         if ($this->Question()->exists()) {
             $origin = $this->Question()->getTreeOrigin();
@@ -139,10 +140,10 @@ class DecisionTreeAnswer extends DataObject
     }
 
     /**
-    * Construct the link tp create a new ResultingStep for this answer
-    *
-    * @return String
-    */
+     * Construct the link tp create a new ResultingStep for this answer
+     *
+     * @return String
+     */
     public function CMSAddStepLink()
     {
         $link = Controller::join_links(
@@ -154,10 +155,10 @@ class DecisionTreeAnswer extends DataObject
     }
 
     /**
-    * Recursively construct the link to edit this object
-    *
-    * @return String
-    */
+     * Recursively construct the link to edit this object
+     *
+     * @return String
+     */
     public function getRecursiveEditPath()
     {
         $path = sprintf('ItemEditForm/field/Answers/item/%s/', $this->ID);
@@ -173,12 +174,39 @@ class DecisionTreeAnswer extends DataObject
     }
 
     /**
-    * Return only the url segment to edit this object
-    *
-    * @return String
-    */
+     * Return only the url segment to edit this object
+     *
+     * @return String
+     */
     public function getRecursiveEditPathForSelf()
     {
         return sprintf('ItemEditForm/field/Answers/item/%s/', $this->ID);
+    }
+
+    /**
+     * Hook before saving the data object.
+     *
+     * @throws \SilverStripe\ORM\ValidationException
+     */
+    protected function onBeforeWrite()
+    {
+        parent::onBeforeWrite();
+
+        $this->validateSelectedResultingStep();
+    }
+
+    /**
+     * Validate the step ID selected by CMS user for resulting step and throw exception if invalid.
+     *
+     * @throws \SilverStripe\ORM\ValidationException
+     */
+    protected function validateSelectedResultingStep()
+    {
+        if ($this->ResultingStepID) {
+            $step = DecisionTreeStep::get()->filter('ID', $this->ResultingStepID)->first();
+            if ($step instanceof DecisionTreeStep && $step->belongsToElement()) {
+                throw new ValidationException('You can\'t select the first step in the tree as a resulting step.');
+            }
+        }
     }
 }

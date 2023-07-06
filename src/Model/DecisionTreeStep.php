@@ -94,8 +94,8 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Set default title on Result steps
-    */
+     * Set default title on Result steps
+     */
     public function onBeforeWrite()
     {
         if ($this->Type == 'Result' && !$this->Title) {
@@ -128,12 +128,12 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Return a readable list of the answer title and the title of the question
-    * which will be displayed if the answer is selected
-    * Used for Gridfield
-    *
-    * @return HTMLText
-    */
+     * Return a readable list of the answer title and the title of the question
+     * which will be displayed if the answer is selected
+     * Used for Gridfield
+     *
+     * @return HTMLText
+     */
     public function getAnswerTreeForGrid()
     {
         $output = '';
@@ -151,10 +151,10 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Outputs an optionset to allow user to select an answer to the question
-    *
-    * @return OptionsetField
-    */
+     * Outputs an optionset to allow user to select an answer to the question
+     *
+     * @return OptionsetField
+     */
     public function getAnswersOptionset()
     {
         $source = array();
@@ -166,21 +166,30 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Return the DecisionAnswer rsponsible for displaying this step
-    *
-    * @return DecisionTreeAnswer
-    */
+     * Return the DecisionAnswer rsponsible for displaying this step
+     *
+     * @return DecisionTreeAnswer|null
+     */
     public function getParentAnswer()
     {
-        return DecisionTreeAnswer::get()->filter('ResultingStepID', $this->ID)->First();
+        // Get db ID of the first step in the tree
+        $firstStepId = $this->ParentElement()->FirstStepID;
+
+        // Return the answer only if the selected resulting step id of the doesn't match the first step.
+        // First step can't be used as resulting step
+        if ($firstStepId > 0 && $firstStepId !== $this->ID) {
+            return DecisionTreeAnswer::get()->filter('ResultingStepID', $this->ID)->First();
+        }
+
+        return null;
     }
 
     /**
-    * Return the list of DecisionTreeAnswer ID
-    * leading to this step being displayed
-    *
-    * @return Array
-    */
+     * Return the list of DecisionTreeAnswer ID
+     * leading to this step being displayed
+     *
+     * @return Array
+     */
     public function getAnswerPathway(&$idList = array())
     {
         if ($answer = $this->getParentAnswer()) {
@@ -194,11 +203,11 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Return the list of DecisionTreeStep ID
-    * leading to this step being displayed
-    *
-    * @return Array
-    */
+     * Return the list of DecisionTreeStep ID
+     * leading to this step being displayed
+     *
+     * @return Array
+     */
     public function getQuestionPathway(&$idList = array())
     {
         array_push($idList, $this->ID);
@@ -212,13 +221,13 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Builds an array of question and answers leading to this Step
-    * Each entry is an array which key is either 'question' or 'answer'
-    * and value is the ID of the object
-    * Note: the array is in reverse order
-    *
-    * @return Array
-    */
+     * Builds an array of question and answers leading to this Step
+     * Each entry is an array which key is either 'question' or 'answer'
+     * and value is the ID of the object
+     * Note: the array is in reverse order
+     *
+     * @return Array
+     */
     public function getFullPathway(&$path = array())
     {
         if ($answer = $this->getParentAnswer()) {
@@ -235,10 +244,10 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Find the very first DecisionStep in the tree
-    *
-    * @return DecisionTreeStep
-    */
+     * Find the very first DecisionStep in the tree
+     *
+     * @return DecisionTreeStep
+     */
     public function getTreeOrigin()
     {
         $pathway = array_reverse($this->getQuestionPathway());
@@ -246,11 +255,11 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Return this step position in the pathway
-    * Used to number step on the front end
-    *
-    * @return Int
-    */
+     * Return this step position in the pathway
+     * Used to number step on the front end
+     *
+     * @return Int
+     */
     public function getPositionInPathway()
     {
         $pathway = array_reverse($this->getFullPathway());
@@ -264,10 +273,10 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Return a DataList of DecisionTreeStep that do not belong to a Tree
-    *
-    * @return SS_List
-    */
+     * Return a DataList of DecisionTreeStep that do not belong to a Tree
+     *
+     * @return SS_List
+     */
     public static function get_orphans()
     {
         $orphans = DecisionTreeStep::get()->filterByCallback(function($item) {
@@ -282,11 +291,11 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Return a DataList of all DecisionTreeStep that do not belong to an answer
-    * ie. are the first child of a element
-    *
-    * @return SS_List
-    */
+     * Return a DataList of all DecisionTreeStep that do not belong to an answer
+     * ie. are the first child of a element
+     *
+     * @return SS_List
+     */
     public static function get_initial_steps()
     {
         $initial = DecisionTreeStep::get()->filterByCallback(function($item) {
@@ -303,35 +312,35 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    *
-    */
+     *
+     */
     public function belongsToTree()
     {
         return ($this->belongsToElement() || $this->belongsToAnswer());
     }
 
     /**
-    *
-    */
+     *
+     */
     public function belongsToElement()
     {
         return (ElementDecisionTree::get()->filter('FirstStepID', $this->ID)->Count() > 0);
     }
 
     /**
-    *
-    */
+     *
+     */
     public function belongsToAnswer()
     {
         return ($this->ParentAnswer() && $this->ParentAnswer()->exists());
     }
 
     /**
-    * Checks if this object is currently being edited in the CMS
-    * by comparing its ID with the one in the request
-    *
-    * @return Boolean
-    */
+     * Checks if this object is currently being edited in the CMS
+     * by comparing its ID with the one in the request
+     *
+     * @return Boolean
+     */
     public function IsCurrentlyEdited()
     {
         $request = Controller::curr()->getRequest();
@@ -348,12 +357,12 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Create a link that allowd to edit this object in the CMS
-    * To do this, it rewinds the tree up to the element
-    * then append its edit url to the edit url of its parent question
-    *
-    * @return String
-    */
+     * Create a link that allowd to edit this object in the CMS
+     * To do this, it rewinds the tree up to the element
+     * then append its edit url to the edit url of its parent question
+     *
+     * @return String
+     */
     public function CMSEditLink() {
         $origin = $this->getTreeOrigin();
         if ($origin) {
@@ -366,10 +375,10 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-    * Build url to allow to edit this object
-    *
-    * @return String
-    */
+     * Build url to allow to edit this object
+     *
+     * @return String
+     */
     public function getRecursiveEditPath()
     {
         $pathway = array_reverse($this->getFullPathway());
