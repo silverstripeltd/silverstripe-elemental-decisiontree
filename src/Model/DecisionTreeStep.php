@@ -166,22 +166,13 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-     * Return the DecisionAnswer rsponsible for displaying this step
+     * Return the DecisionAnswer responsible for displaying this step
      *
      * @return DecisionTreeAnswer|null
      */
     public function getParentAnswer()
     {
-        // Get db ID of the first step in the tree
-        $firstStepId = $this->ParentElement()->FirstStepID;
-
-        // Return the answer only if the selected resulting step id of the doesn't match the first step.
-        // First step can't be used as resulting step
-        if ($firstStepId > 0 && $firstStepId !== $this->ID) {
-            return DecisionTreeAnswer::get()->filter('ResultingStepID', $this->ID)->First();
-        }
-
-        return null;
+        return DecisionTreeAnswer::get()->filter('ResultingStepID', $this->ID)->First();
     }
 
     /**
