@@ -5,6 +5,7 @@ namespace DNADesign\SilverStripeElementalDecisionTree\Extensions;
 use DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeAnswer;
 use DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeStep;
 use SilverStripe\Control\Controller;
+use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extension;
 use SilverStripe\Model\ArrayData;
 use SilverStripe\ORM\FieldType\DBHTMLText;
@@ -12,13 +13,28 @@ use SilverStripe\View\Requirements;
 
 class ElementDecisionTreeController extends Extension
 {
+    use Configurable;
+
+    /**
+     * Whether or not to include jquery included in the module.
+     *
+     * @config
+     */
+    private static bool $include_jquery = true;
+
+    /**
+     * Whether or not to include the javascript included in the module.
+     *
+     * @config
+     */
+    private static bool $include_default_js = true;
+
     private static array $allowed_actions = [
         'getNextStepForAnswer',
     ];
 
     public function onAfterInit(): void
     {
-        Requirements::javascript('dnadesign/silverstripe-elemental-decisiontree:javascript/decision-tree.src.js');
         Requirements::customCSS(
             <<<CSS
                 .decisiontree .step-options input[type="radio"]:focus + label,
@@ -28,6 +44,19 @@ class ElementDecisionTreeController extends Extension
                 }
             CSS
         );
+
+        if (self::config()->get('include_jquery')) {
+            Requirements::javascript(
+                'dnadesign/silverstripe-elemental-decisiontree:javascript/jquery.min.js'
+            );
+        }
+
+        if (self::config()->get('include_default_js')) {
+            Requirements::javascript(
+                'dnadesign/silverstripe-elemental-decisiontree:javascript/decision-tree.src.js',
+                ['defer' => true]
+            );
+        }
     }
 
     /**
