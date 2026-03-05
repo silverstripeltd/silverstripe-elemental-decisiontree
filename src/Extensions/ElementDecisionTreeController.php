@@ -29,12 +29,23 @@ class ElementDecisionTreeController extends Extension
      */
     private static bool $include_default_js = true;
 
+    /**
+     * Whether to include frontend requirements. Can be disabled for testing.
+     *
+     * @config
+     */
+    private static bool $enable_requirements = true;
+
     private static array $allowed_actions = [
         'getNextStepForAnswer',
     ];
 
     public function onAfterInit(): void
     {
+        if (!$this->config()->get('enable_requirements')) {
+            return;
+        }
+
         Requirements::customCSS(
             <<<CSS
                 .decisiontree .step-options input[type="radio"]:focus + label,

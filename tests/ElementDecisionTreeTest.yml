@@ -1,0 +1,42 @@
+DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeStep:
+  step1:
+    Title: 'Step 1'
+    Type: 'Question'
+  step2:
+    Title: 'Step 2'
+    Type: 'Question'
+  step3:
+    Title: 'Step 3'
+    Type: 'Result'
+  orphan_step:
+    Title: 'Orphan Step'
+    Type: 'Question'
+  result_no_title:
+    Title: ''
+    Type: 'Result'
+
+DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeAnswer:
+  answer1:
+    Title: 'Answer 1'
+    Question: =>DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeStep.step1
+    ResultingStep: =>DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeStep.step2
+  answer2:
+    Title: 'Answer 2'
+    Question: =>DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeStep.step2
+    ResultingStep: =>DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeStep.step3
+
+DNADesign\SilverStripeElementalDecisionTree\Model\ElementDecisionTree:
+  tree1:
+    Title: 'Test Decision Tree'
+    FirstStep: =>DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeStep.step1
+
+DNADesign\Elemental\Models\ElementalArea:
+  area1:
+    Elements:
+      - =>DNADesign\SilverStripeElementalDecisionTree\Model\ElementDecisionTree.tree1
+
+DNADesign\SilverStripeElementalDecisionTree\Tests\Src\TestPage:
+  page1:
+    Title: 'Test Page'
+    URLSegment: 'test-page'
+    ElementalArea: =>DNADesign\Elemental\Models\ElementalArea.area1

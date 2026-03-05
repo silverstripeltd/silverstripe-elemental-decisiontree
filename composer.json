@@ -1,30 +1,45 @@
 {
-  "name": "dnadesign/silverstripe-elemental-decisiontree",
-  "description": "Element displaying information in regards to answers given to questions",
-  "type": "silverstripe-vendormodule",
-  "keywords": ["silverstripe", "element", "elemental", "decision tree"],
-  "license": "BSD-3-Clause",
-  "authors": [{
-    "name": "Alexandre Saelens",
-    "email": "alexandre.saelens@dna.co.nz"
-  }],
-  "extra": {
-    "expose": [
-      "css",
-      "javascript"
-    ]
-  },
-  "minimum-stability": "dev",
-  "prefer-stable": true,
-  "require": {
-    "dnadesign/silverstripe-elemental": "^6",
-    "silvershop/silverstripe-hasonefield": "^5",
-    "unclecheese/display-logic": "^4"
-  },
-  "config": {
-    "allow-plugins": {
-      "composer/installers": true,
-      "silverstripe/vendor-plugin": true
+    "name": "dnadesign/silverstripe-elemental-decisiontree",
+    "description": "Element displaying information in regards to answers given to questions",
+    "type": "silverstripe-vendormodule",
+    "keywords": [
+        "silverstripe",
+        "element",
+        "elemental",
+        "decision tree"
+    ],
+    "license": "BSD-3-Clause",
+    "authors": [
+        {
+            "name": "Alexandre Saelens",
+            "email": "alexandre.saelens@dna.co.nz"
+        }
+    ],
+    "extra": {
+        "expose": [
+            "css",
+            "javascript"
+        ]
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "require": {
+        "dnadesign/silverstripe-elemental": "^6",
+        "silvershop/silverstripe-hasonefield": "^5",
+        "unclecheese/display-logic": "^4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5",
+        "silverstripe/cms": "^6"
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true,
+            "silverstripe/vendor-plugin": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
     }
-  }
 }
