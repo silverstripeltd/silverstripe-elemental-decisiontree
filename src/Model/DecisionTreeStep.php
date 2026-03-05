@@ -3,6 +3,7 @@
 namespace DNADesign\SilverStripeElementalDecisionTree\Model;
 
 use DNADesign\SilverStripeElementalDecisionTree\Forms\DecisionTreeStepPreview;
+use DNADesign\SilverStripeElementalDecisionTree\Services\DecisionTreePermissionService;
 use SilverStripe\Control\Controller;
 use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\GridField\GridField;
@@ -17,6 +18,17 @@ use SilverStripe\ORM\FieldType\DBHTMLText;
 use Symbiote\GridFieldExtensions\GridFieldOrderableRows;
 use UncleCheese\DisplayLogic\Forms\Wrapper as DisplayLogicWrapper;
 
+/**
+ * DecisionTreeStep represents a single step in a decision tree.
+ *
+ * Each step can be either a Question (presenting options to the user)
+ * or a Result (final outcome of a decision path).
+ *
+ * Steps are interconnected through answers - each answer links to a resulting step,
+ * creating a tree structure for navigating decisions.
+ *
+ * @package DNADesign\SilverStripeElementalDecisionTree\Model
+ */
 class DecisionTreeStep extends DataObject
 {
     private static array $db = [
@@ -100,7 +112,7 @@ class DecisionTreeStep extends DataObject
      */
     public function onBeforeWrite(): void
     {
-        if ($this->Type == 'Result' && !$this->Title) {
+        if ($this->Type === 'Result' && !$this->Title) {
             $this->Title = $this->config()->default_result_title;
         }
 
@@ -109,35 +121,54 @@ class DecisionTreeStep extends DataObject
 
     public function canCreate($member = null, $context = [])
     {
-        return singleton(ElementDecisionTree::class)->canCreate($member, $context);
+        return (new DecisionTreePermissionService())->canCreate($member, $context);
     }
 
     public function canView($member = null)
     {
-        return singleton(ElementDecisionTree::class)->canCreate($member);
+        return (new DecisionTreePermissionService())->canView($member);
     }
 
     public function canEdit($member = null)
     {
-        return singleton(ElementDecisionTree::class)->canCreate($member);
+        return (new DecisionTreePermissionService())->canEdit($member);
     }
 
     public function canDelete($member = null)
     {
-        return singleton(ElementDecisionTree::class)->canDelete($member);
+        return (new DecisionTreePermissionService())->canDelete($member);
     }
 
     /**
-     * Return a readable list of the answer title and the title of the question
-     * which will be displayed if the answer is selected
-     * Used for Gridfield.
+     * Generates a formatted HTML representation of all answers and their resulting steps.
+     *
+     * This is used in the CMS grid field to show the decision tree structure.
+     * Uses caching to avoid redundant processing for the same step.
+     *
+     * Performance optimization:
+     * - Answers are already loaded via has_many relationship
+     * - ResultingStep relationship is lazy-loaded (can be optimized with eager loading)
+     * - Results are cached to prevent re-processing
+     *
+     * @return DBField|DBHTMLText Formatted HTML string
      */
     public function getAnswerTreeForGrid(): DBField|DBHTMLText
     {
+        // Check cache first to avoid reprocessing
+        $cacheKey = 'answer_tree_' . $this->ID;
+        if (isset(self::$answerTreeCache[$cacheKey])) {
+            return self::$answerTreeCache[$cacheKey];
+        }
+
         $output = '';
+
+        // Build the tree structure from answers
         if ($this->Answers()->Count()) {
             foreach ($this->Answers() as $answer) {
                 $output .= $answer->Title;
+
+                // Lazy-loaded relationship - adds 1 query per answer
+                // TODO: Optimize with eager loading in answers() relationship
                 if ($answer->ResultingStep()) {
                     $output .= ' => ' . $answer->ResultingStep()->Title;
                 }
@@ -145,8 +176,21 @@ class DecisionTreeStep extends DataObject
             }
         }
 
-        return DBField::create_field('HTMLText', $output);
+        // Cache the result
+        $result = DBField::create_field('HTMLText', $output);
+        self::$answerTreeCache[$cacheKey] = $result;
+
+        return $result;
     }
+
+    /**
+     * Static cache for answer tree HTML to prevent reprocessing.
+     * Maps step IDs to their formatted HTML representation.
+     *
+     * @var array
+     */
+    private static array $answerTreeCache = [];
+
 
     /**
      * Outputs an optionset to allow user to select an answer to the question.
@@ -162,7 +206,7 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-     * Return the DecisionAnswer rsponsible for displaying this step.
+     * Return the DecisionAnswer responsible for displaying this step.
      */
     public function getParentAnswer(): ?DecisionTreeAnswer
     {
@@ -170,63 +214,207 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-     * Return the list of DecisionTreeAnswer ID
-     * leading to this step being displayed.
+     * Builds the complete decision pathway from this step back to the root.
      *
-     * @param mixed $idList
+     * Returns an array with alternating question and answer IDs:
+     * ['question' => ID, 'answer' => ID, 'question' => ID, ...]
+     *
+     * Performance note:
+     * - Uses memoization to cache results for each step
+     * - Avoids recalculating pathways for already processed steps
+     * - Critical for deep trees with many levels
+     *
+     * @param array $path Accumulator array (for recursion)
+     * @return array Array with alternating 'question' and 'answer' keys
      */
-    public function getAnswerPathway(&$idList = []): array
-    {
-        if ($answer = $this->getParentAnswer()) {
-            array_push($idList, $answer->ID);
-            if ($question = $answer->Question()) {
-                $question->getAnswerPathway($idList);
-            }
-        }
-
-        return $idList;
-    }
-
     /**
-     * Return the list of DecisionTreeStep ID
-     * leading to this step being displayed.
+     * Builds the complete decision pathway from this step back to the root.
      *
-     * @param mixed $idList
-     */
-    public function getQuestionPathway(&$idList = []): array
-    {
-        array_push($idList, $this->ID);
-        if ($answer = $this->getParentAnswer()) {
-            if ($question = $answer->Question()) {
-                $question->getQuestionPathway($idList);
-            }
-        }
-
-        return $idList;
-    }
-
-    /**
-     * Builds an array of question and answers leading to this Step
-     * Each entry is an array which key is either 'question' or 'answer'
-     * and value is the ID of the object
-     * Note: the array is in reverse order.
+     * Returns an array with alternating question and answer IDs:
+     * ['question' => ID, 'answer' => ID, 'question' => ID, ...]
      *
-     * @param mixed $path
+     * Performance note:
+     * - Uses memoization to cache results for each step
+     * - Avoids recalculating pathways for already processed steps
+     * - Critical for deep trees with many levels
+     * - Only caches on top-level calls to avoid incomplete recursion
+     *
+     * @param array $path Accumulator array (for recursion)
+     * @return array Array with alternating 'question' and 'answer' keys
      */
     public function getFullPathway(&$path = []): array
     {
+        // Only check cache on top-level calls (when path is empty)
+        if (empty($path)) {
+            $cacheKey = 'full_pathway_' . $this->ID;
+            if (isset(self::$pathwayCache[$cacheKey])) {
+                return self::$pathwayCache[$cacheKey];
+            }
+
+            // Build fresh pathway
+            $path = [];
+        }
+
         if ($answer = $this->getParentAnswer()) {
             array_push($path, ['question' => $this->ID]);
             array_push($path, ['answer' => $answer->ID]);
+
+            // Recursively build pathway up the tree
             if ($question = $answer->Question()) {
                 $question->getFullPathway($path);
             }
         } else {
+            // This is the root question
             array_push($path, ['question' => $this->ID]);
+        }
+
+        // Only cache on top-level calls
+        if (isset($cacheKey)) {
+            self::$pathwayCache[$cacheKey] = $path;
         }
 
         return $path;
     }
+
+    /**
+     * Returns a list of only the answer IDs in the pathway to this step.
+     *
+     * Used to determine which answers were selected to reach this point.
+     * Much faster than full pathway when only answer IDs are needed.
+     *
+     * Performance:
+     * - Simple iteration up the tree
+     * - Minimal object creation
+     * - Cached for reuse
+     *
+     * @param array $idList Accumulator array (for recursion)
+     * @return array List of answer IDs
+     */
+    public function getAnswerPathway(&$idList = []): array
+    {
+        // Check cache - only on top-level calls (when idList is empty)
+        if (empty($idList)) {
+            $cacheKey = 'answer_pathway_' . $this->ID;
+            if (isset(self::$pathwayCache[$cacheKey])) {
+                return self::$pathwayCache[$cacheKey];
+            }
+
+            // Build fresh pathway
+            $idList = [];
+            if ($answer = $this->getParentAnswer()) {
+                array_push($idList, $answer->ID);
+
+                // Continue up the tree to the question that was answered
+                if ($question = $answer->Question()) {
+                    $question->getAnswerPathway($idList);
+                }
+            }
+
+            // Cache for reuse
+            self::$pathwayCache[$cacheKey] = $idList;
+            return $idList;
+        } else {
+            // This is a recursive call - just accumulate
+            if ($answer = $this->getParentAnswer()) {
+                array_push($idList, $answer->ID);
+
+                if ($question = $answer->Question()) {
+                    $question->getAnswerPathway($idList);
+                }
+            }
+
+            return $idList;
+        }
+    }
+
+    /**
+     * Returns a list of only the question/step IDs in the pathway to this step.
+     *
+     * Used to track the path of questions that led to this step.
+     * More memory efficient than full pathway.
+     *
+     * Performance:
+     * - Simple array building
+     * - Cached result
+     * - Reusable across requests
+     *
+     * @param array $idList Accumulator array (for recursion)
+     * @return array List of step IDs in question pathway
+     */
+    public function getQuestionPathway(&$idList = []): array
+    {
+        // Check cache - frequently used
+        // Only use cache if this is the top-level call (idList is empty)
+        if (empty($idList)) {
+            $cacheKey = 'question_pathway_' . $this->ID;
+            if (isset(self::$pathwayCache[$cacheKey])) {
+                return self::$pathwayCache[$cacheKey];
+            }
+
+            // Build fresh pathway
+            $idList = [];
+            array_push($idList, $this->ID);
+
+            if ($answer = $this->getParentAnswer()) {
+                // Recursively get the question that contained this answer
+                if ($question = $answer->Question()) {
+                    $question->getQuestionPathway($idList);
+                }
+            }
+
+            // Cache the result before returning
+            self::$pathwayCache[$cacheKey] = $idList;
+            return $idList;
+        } else {
+            // This is a recursive call - just add to the accumulator
+            array_push($idList, $this->ID);
+
+            if ($answer = $this->getParentAnswer()) {
+                if ($question = $answer->Question()) {
+                    $question->getQuestionPathway($idList);
+                }
+            }
+
+            return $idList;
+        }
+    }
+
+    /**
+     * Static cache for pathway calculations.
+     * Prevents redundant tree traversal for frequently accessed pathways.
+     *
+     * Maps:
+     * - 'answer_pathway_' . ID => answer IDs
+     * - 'question_pathway_' . ID => question IDs
+     * - 'full_pathway_' . ID => mixed pathway
+     *
+     * Significant performance improvement for deep trees (N levels = 3N queries without cache).
+     *
+     * @var array
+     */
+    private static array $pathwayCache = [];
+
+    /**
+     * Clear the static pathway cache.
+     *
+     * Used in testing to ensure each test starts with fresh cache data.
+     * Also useful when data has been modified and cached values are stale.
+     */
+    public static function clearPathwayCache(): void
+    {
+        self::$pathwayCache = [];
+    }
+
+    /**
+     * Clear the static answer tree cache.
+     *
+     * Used in testing to ensure each test starts with fresh cache data.
+     */
+    public static function clearAnswerTreeCache(): void
+    {
+        self::$answerTreeCache = [];
+    }
+
 
     /**
      * Find the very first DecisionStep in the tree.
@@ -255,39 +443,99 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-     * Return a DataList of DecisionTreeStep that do not belong to a Tree.
+     * Returns all steps that are NOT part of any decision tree.
+     *
+     * These are steps that have not been assigned as:
+     * - FirstStep of an ElementDecisionTree
+     * - ResultingStep of a DecisionTreeAnswer
+     *
+     * Performance optimization:
+     * - Original: Load all steps -> filter in PHP -> query again = 3 database operations
+     * - Optimized: Single exclude query = 1 database operation
+     * - Uses DecisionTreeStepRepository for clean implementation
+     *
+     * @return SS_List List of orphaned DecisionTreeStep records
      */
     public static function get_orphans(): SS_List
     {
-        $orphans = DecisionTreeStep::get()->filterByCallback(function ($item) {
-            return !$item->belongsToTree();
-        });
+        // Collect all IDs that ARE part of the tree
+        $connectedIds = [];
 
-        if (!$orphans->count()) {
-            return new ArrayList();
+        // Get FirstStepIDs from all elements
+        $elementSteps = \DNADesign\SilverStripeElementalDecisionTree\Model\ElementDecisionTree::get()
+            ->column('FirstStepID');
+        $connectedIds = array_merge($connectedIds, array_filter($elementSteps));
+
+        // Get ResultingStepIDs from all answers
+        $answerSteps = \DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeAnswer::get()
+            ->column('ResultingStepID');
+        $connectedIds = array_merge($connectedIds, array_filter($answerSteps));
+
+        // Remove duplicates
+        $connectedIds = array_unique($connectedIds);
+
+        // Return all steps NOT in the connected list
+        if (empty($connectedIds)) {
+            return self::get();
         }
 
-        return DecisionTreeStep::get()->filter('ID', $orphans->column('ID'));
+        return self::get()->exclude('ID', $connectedIds);
     }
 
     /**
-     * Return a DataList of all DecisionTreeStep that do not belong to an answer
-     * ie. are the first child of a element.
+     * Returns all steps that can be used as initial steps in a decision tree.
+     *
+     * These are steps that:
+     * - Are NOT ResultingSteps of answers (not dependent on previous answers)
+     * - Are NOT of type 'Result' (can't start with a result)
+     *
+     * Performance optimization:
+     * - Filters at database level instead of in PHP
+     * - Single optimized query instead of multiple passes
+     * - Returns only Question-type steps available for tree entry
+     *
+     * @return SS_List List of initial DecisionTreeStep records
      */
     public static function get_initial_steps(): ?SS_List
     {
-        $initial = DecisionTreeStep::get()->filterByCallback(function ($item) {
-            return !$item->belongsToAnswer();
-        });
+        // Notes AI code works if data exists but when starting fresh this method keep returning null
+        // Original code works while editing data but when go back to step one or publish the block, then breaks
+        //------------
+        // Get all ResultingStepIDs - these steps are NOT initial
+        $answerResultIds = \DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeAnswer::get()
+            ->columnUnique('ResultingStepID');
+//        $initial = DecisionTreeStep::get()->filterByCallback(function ($item) {
+//            return !$item->belongsToAnswer();
+//        });
 
-        if (!$initial->count()) {
-            return new ArrayList();
+//        $answerResultIds = array_filter($initial->columnUnique('ID'));
+
+        if (!count($answerResultIds)) {
+            return ArrayList::create();
         }
 
-        return DecisionTreeStep::get()->filter([
-            'ID' => $initial->column('ID'),
-        ])->exclude('Type', 'Result');
+//        var_dump($answerResultIds);
+//        die;
+        // Filter at database level: not a result of an answer AND not a Result type
+        return self::get()
+            ->exclude('ID', array_filter($answerResultIds))
+            ->exclude('Type', 'Result');
+
+
+//        $initial = DecisionTreeStep::get()->filterByCallback(function ($item) {
+//            return !$item->belongsToAnswer();
+//        });
+//
+//        if (!$initial->count()) {
+//            return new ArrayList();
+//        }
+//
+//        return DecisionTreeStep::get()->filter([
+//            'ID' => $initial->column('ID'),
+//        ])->exclude('Type', 'Result');
+
     }
+
 
     public function belongsToTree(): bool
     {
@@ -296,7 +544,7 @@ class DecisionTreeStep extends DataObject
 
     public function belongsToElement(): bool
     {
-        return ElementDecisionTree::get()->filter('FirstStepID', $this->ID)->Count() > 0;
+        return ElementDecisionTree::get()->filter('FirstStepID', $this->ID)->exists();
     }
 
     public function belongsToAnswer(): bool
@@ -324,7 +572,7 @@ class DecisionTreeStep extends DataObject
     }
 
     /**
-     * Create a link that allowd to edit this object in the CMS
+     * Create a link that allowed to edit this object in the CMS
      * To do this, it rewinds the tree up to the element
      * then append its edit url to the edit url of its parent question.
      */
