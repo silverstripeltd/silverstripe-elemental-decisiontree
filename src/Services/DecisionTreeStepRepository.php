@@ -65,10 +65,19 @@ class DecisionTreeStepRepository
         $answerResultIds = \DNADesign\SilverStripeElementalDecisionTree\Model\DecisionTreeAnswer::get()
             ->column('ResultingStepID');
 
+        // Filter empty values from the array
+        $answerResultIds = array_filter($answerResultIds);
+
         // Get all steps that are not results of answers and not result type
-        return DecisionTreeStep::get()
-            ->exclude('ID', array_filter($answerResultIds))
+        $steps = DecisionTreeStep::get()
             ->exclude('Type', 'Result');
+
+        // Only exclude answer results if there are any
+        if (!empty($answerResultIds)) {
+            $steps = $steps->exclude('ID', $answerResultIds);
+        }
+
+        return $steps;
     }
 
     /**
